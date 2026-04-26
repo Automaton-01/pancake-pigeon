@@ -24,9 +24,29 @@ export class Game extends Scene
         this.idleTime = 0;
         const lv = this.level;
 
-        // World + camera
+        // World + camera. On portrait/mobile the canvas is much taller than
+        // wide; we reserve the bottom strip for the touch joystick + jump
+        // button so they don't sit on top of the gameplay. `viewH` is the
+        // height of the actual game view above the control bar.
+        const camW = this.cameras.main.width;
+        const camH = this.cameras.main.height;
+        this.controlBarH = camH > camW ? 240 : 0;
+        this.viewH = camH - this.controlBarH;
+
+        // If the view is taller than the world (e.g. mobile portrait on a
+        // horizontal level), pad sky above so the world sits at the bottom of
+        // the view rather than floating in sky. Bounds height is extended by
+        // controlBarH so that when the camera reaches the bottom of a tall
+        // world, the world's lowest content lines up with the top of the bar
+        // (rather than disappearing behind it).
         this.matter.world.setBounds(0, -200, lv.worldWidth, lv.worldHeight + 600);
-        this.cameras.main.setBounds(0, 0, lv.worldWidth, lv.worldHeight);
+        const padTop = Math.max(0, this.viewH - lv.worldHeight);
+        this.cameras.main.setBounds(
+            0,
+            -padTop,
+            lv.worldWidth,
+            Math.max(this.viewH, lv.worldHeight) + this.controlBarH
+        );
         this.cameras.main.setBackgroundColor(0xb8e1f7);
 
         // Background sky decorations
@@ -265,7 +285,10 @@ export class Game extends Scene
     createSky () {
         const lv = this.level;
         const camW = this.cameras.main.width;
-        const camH = this.cameras.main.height;
+        // Use the visible-view height (above the touch control bar on mobile)
+        // so the horizon gradient/haze land at the bottom of the gameplay
+        // area, not hidden behind the bar.
+        const camH = this.viewH ?? this.cameras.main.height;
 
         // Sky gradient — cool blue at top fading to warm cream at horizon
         const sky = this.add.graphics();
@@ -539,9 +562,29 @@ export class Game extends Scene
     createMobileControls () {
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
+        const barH = this.controlBarH;
+
+        // Control-bar background (only on portrait/mobile where barH > 0).
+        // Sits above world content but below the buttons. Same warm-dark
+        // palette as the top HUD bar so it reads as part of the UI.
+        if (barH > 0) {
+            const barY = H - barH / 2;
+            this.add.rectangle(W / 2, barY, W, barH, 0x3a2818, 1)
+                .setScrollFactor(0).setDepth(90);
+            // Thin warm rule along the top edge
+            this.add.rectangle(W / 2, this.viewH, W, 2, 0xffd166, 0.45)
+                .setScrollFactor(0).setDepth(90);
+            // Subtle top inner highlight so the bar feels lifted
+            this.add.rectangle(W / 2, this.viewH + 4, W, 6, 0x000000, 0.25)
+                .setScrollFactor(0).setDepth(90);
+        }
+
+        // Center the controls vertically inside the bar (or fall back to the
+        // old offset on landscape, where there is no bar).
+        const ctrlY = barH > 0 ? H - barH / 2 : H - 100;
 
         // ---- Virtual joystick (bottom-left) ----
-        const jx = 130, jy = H - 100;
+        const jx = 130, jy = ctrlY;
         const baseR = 70, thumbR = 32;
         const thumbMaxOff = baseR - thumbR;
 
@@ -590,7 +633,7 @@ export class Game extends Scene
         });
 
         // ---- Jump button (bottom-right) ----
-        const bx = W - 130, by = H - 100;
+        const bx = W - 130, by = ctrlY;
         const bR = 56;
         const jumpBg = this.add.circle(bx, by, bR, 0xff8c42, 0.82)
             .setStrokeStyle(4, 0x5b3a29, 0.95).setScrollFactor(0).setDepth(95);
@@ -1136,9 +1179,11 @@ export class Game extends Scene
             stroke: '#000000', strokeThickness: 3
         }).setScrollFactor(0).setDepth(101);
 
-        // Health hearts (bottom-center, in a small warm-brown pill)
+        // Health hearts (bottom-center, in a small warm-brown pill).
+        // Sits at the bottom of the visible game view, above the touch
+        // control bar (which lives in the canvas's bottom strip on mobile).
         this.healthIcons = [];
-        const heartY = cam.height - 28;
+        const heartY = (this.viewH ?? cam.height) - 28;
         const pillW = 26 + this.maxHealth * 30;
         this.add.rectangle(W/2, heartY, pillW, 38, 0x3a2818, 0.55)
             .setStrokeStyle(2, 0xffd166, 0.45).setScrollFactor(0).setDepth(100);
