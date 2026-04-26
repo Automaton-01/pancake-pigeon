@@ -68,10 +68,7 @@ export const LEVELS = [
             { x: 760,  y: 300,  w: 120, h: 30 },  // step 10
             { x: 540,  y: 220,  w: 320, h: 40 }   // goal platform (top)
         ],
-        spikes: [
-            { x: 720,  y: 1060, w: 60 },          // hazard on step 2 — must hop right
-            { x: 1000, y: 580,  w: 60 }           // mid-climb hazard
-        ],
+        spikes: [],   // climb is hazard-only — spikes sit awkwardly on the small steps
         pancakes: [
             { x: 180,  y: 1180 },
             { x: 920,  y: 1080 },                 // side branch reward

@@ -524,7 +524,95 @@ export class Game extends Scene
         this.rKey.on('down', () => this.fullRespawn());
         this.escKey.on('down', () => this.openPauseOverlay());
 
-        // Bridge-drawing was removed — levels are pure platforming now.
+        // Multi-touch: allow holding the joystick AND tapping jump at once.
+        this.input.addPointer(2);
+
+        // Touch-control state (OR'd into keyboard input each frame).
+        this.touchLeft = false;
+        this.touchRight = false;
+        this.touchJump = false;
+        this.createMobileControls();
+    }
+
+    // On-screen joystick + jump button. Always visible; on desktop the buttons
+    // are still tappable, on mobile/tablet they're the primary input.
+    createMobileControls () {
+        const W = this.cameras.main.width;
+        const H = this.cameras.main.height;
+
+        // ---- Virtual joystick (bottom-left) ----
+        const jx = 130, jy = H - 100;
+        const baseR = 70, thumbR = 32;
+        const thumbMaxOff = baseR - thumbR;
+
+        const jBase = this.add.circle(jx, jy, baseR, 0x2a1f1a, 0.32)
+            .setStrokeStyle(4, 0xfff5e1, 0.7).setScrollFactor(0).setDepth(95);
+        const jThumb = this.add.circle(jx, jy, thumbR, 0xfff5e1, 0.78)
+            .setStrokeStyle(3, 0x5b3a29, 0.85).setScrollFactor(0).setDepth(96);
+        jBase.setInteractive();
+        // Hint arrows on the base ring
+        const arrowStyle = {
+            fontFamily: 'Arial Black', fontSize: 22, color: '#fff5e1',
+            stroke: '#5b3a29', strokeThickness: 3
+        };
+        this.add.text(jx - baseR + 14, jy, '◀', arrowStyle)
+            .setOrigin(0.5).setScrollFactor(0).setDepth(96).setAlpha(0.85);
+        this.add.text(jx + baseR - 14, jy, '▶', arrowStyle)
+            .setOrigin(0.5).setScrollFactor(0).setDepth(96).setAlpha(0.85);
+
+        let joyId = null;
+        const updateJoy = (pointer) => {
+            const dx = pointer.x - jx;
+            const dy = pointer.y - jy;
+            const dist = Math.min(thumbMaxOff, Math.hypot(dx, dy));
+            const a = Math.atan2(dy, dx);
+            jThumb.x = jx + Math.cos(a) * dist;
+            jThumb.y = jy + Math.sin(a) * dist;
+            const dead = baseR * 0.25;
+            this.touchLeft = dx < -dead;
+            this.touchRight = dx > dead;
+        };
+        const releaseJoy = () => {
+            joyId = null;
+            jThumb.x = jx; jThumb.y = jy;
+            this.touchLeft = false;
+            this.touchRight = false;
+        };
+        jBase.on('pointerdown', (pointer) => {
+            joyId = pointer.id;
+            updateJoy(pointer);
+        });
+        this.input.on('pointermove', (pointer) => {
+            if (pointer.id === joyId) updateJoy(pointer);
+        });
+        this.input.on('pointerup', (pointer) => {
+            if (pointer.id === joyId) releaseJoy();
+        });
+
+        // ---- Jump button (bottom-right) ----
+        const bx = W - 130, by = H - 100;
+        const bR = 56;
+        const jumpBg = this.add.circle(bx, by, bR, 0xff8c42, 0.82)
+            .setStrokeStyle(4, 0x5b3a29, 0.95).setScrollFactor(0).setDepth(95);
+        const jumpLabel = this.add.text(bx, by - 4, '↑', {
+            fontFamily: 'Arial Black', fontSize: 56, color: '#fff5e1',
+            stroke: '#5b3a29', strokeThickness: 4
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(96);
+        jumpBg.setInteractive();
+
+        const setJumpPressed = (pressed) => {
+            this.touchJump = pressed;
+            jumpBg.setFillStyle(pressed ? 0xffa55a : 0xff8c42, pressed ? 0.95 : 0.82);
+            const s = pressed ? 0.94 : 1;
+            jumpBg.setScale(s);
+            jumpLabel.setScale(s);
+        };
+        jumpBg.on('pointerdown', () => setJumpPressed(true));
+        jumpBg.on('pointerup', () => setJumpPressed(false));
+        jumpBg.on('pointerout', () => setJumpPressed(false));
+
+        // Save handles in case we want to hide/show later (e.g. on win screen).
+        this.mobileControls = { jBase, jThumb, jumpBg, jumpLabel };
     }
 
     setupCollisions () {
@@ -1378,9 +1466,9 @@ export class Game extends Scene
         const speed = this.walkSpeed;
         const jumpV = this.jumpVelocity;
 
-        const leftDown = this.cursors.left.isDown;
-        const rightDown = this.cursors.right.isDown;
-        const wantsJump = this.cursors.up.isDown || this.spaceKey.isDown;
+        const leftDown = this.cursors.left.isDown || this.touchLeft;
+        const rightDown = this.cursors.right.isDown || this.touchRight;
+        const wantsJump = this.cursors.up.isDown || this.spaceKey.isDown || this.touchJump;
 
         // Horizontal movement
         let vx = body.velocity.x;
