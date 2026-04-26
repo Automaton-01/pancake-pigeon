@@ -3,6 +3,7 @@ import { Game as MainGame } from './scenes/Game';
 import { GameOver } from './scenes/GameOver';
 import { LevelSelect } from './scenes/LevelSelect';
 import { MainMenu } from './scenes/MainMenu';
+import { PauseOverlay } from './scenes/PauseOverlay';
 import { Preloader } from './scenes/Preloader';
 import { AUTO, Game, Scale } from 'phaser';
 
@@ -30,7 +31,8 @@ const config = {
         MainMenu,
         LevelSelect,
         MainGame,
-        GameOver
+        GameOver,
+        PauseOverlay
     ]
 };
 

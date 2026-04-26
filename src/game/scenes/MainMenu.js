@@ -1,5 +1,7 @@
 import { Scene } from 'phaser';
-import { SFX, initAudio } from '../audio';
+import { SFX, initAudio, isMuted, setMuted } from '../audio';
+import { loadVariant, saveVariant } from '../progress';
+import { VARIANTS, VARIANT_ORDER, staticTextureKey } from '../variants';
 
 export class MainMenu extends Scene
 {
@@ -11,13 +13,33 @@ export class MainMenu extends Scene
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
         this.cameras.main.setBackgroundColor(0x9bd6f5);
+        this.cameras.main.fadeIn(500, 0, 0, 0);
 
-        // Sun
-        this.add.circle(W - 130, 130, 75, 0xfff2b0, 0.4);
-        this.add.circle(W - 130, 130, 55, 0xfff2b0);
+        // Sky gradient (lighter at top, hint of warmth lower)
+        const grad = this.add.graphics();
+        grad.fillGradientStyle(0xb8e1f7, 0xb8e1f7, 0xfde6c0, 0xfde6c0, 1);
+        grad.fillRect(0, 0, W, H - 100);
+
+        // Sun with rays
+        const sunX = W - 130, sunY = 130;
+        this.add.circle(sunX, sunY, 90, 0xfff2b0, 0.25);
+        const sun = this.add.circle(sunX, sunY, 60, 0xfff2b0);
+        this.tweens.add({ targets: sun, scale: 1.06, duration: 1700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        // Rotating rays
+        const rays = this.add.graphics();
+        rays.lineStyle(4, 0xfff2b0, 0.4);
+        for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            rays.beginPath();
+            rays.moveTo(Math.cos(a) * 70, Math.sin(a) * 70);
+            rays.lineTo(Math.cos(a) * 110, Math.sin(a) * 110);
+            rays.strokePath();
+        }
+        rays.x = sunX; rays.y = sunY;
+        this.tweens.add({ targets: rays, rotation: Math.PI * 2, duration: 30000, repeat: -1, ease: 'Linear' });
 
         // Animated clouds
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 6; i++) {
             const cy = 50 + i * 40 + Math.random() * 30;
             const cx = Math.random() * W;
             const cloud = this.add.container(cx, cy);
@@ -34,56 +56,254 @@ export class MainMenu extends Scene
             });
         }
 
-        // Ground band
+        // Distant hills
+        const hills = this.add.graphics();
+        hills.fillStyle(0x7fb55a, 0.55);
+        for (let x = -200; x < W + 200; x += 280) hills.fillCircle(x, H - 100, 200);
+
+        // Ground band with grass
         this.add.rectangle(W/2, H - 60, W, 120, 0x8fbc5c);
+        for (let gx = 0; gx < W; gx += 6 + Math.random() * 6) {
+            const h = 9 + Math.random() * 14;
+            const w = 1.4 + Math.random() * 1.5;
+            const blade = this.add.rectangle(gx, H - 120, w, h,
+                [0x6fa54a, 0x7eb35a, 0x8fbf5c, 0x5d8f3d][Math.floor(Math.random() * 4)]);
+            blade.setOrigin(0.5, 1);
+            this.tweens.add({
+                targets: blade,
+                angle: 8,
+                duration: 900 + Math.random() * 600,
+                yoyo: true,
+                repeat: -1,
+                delay: Math.random() * 800,
+                ease: 'Sine.easeInOut'
+            });
+        }
 
         // Title
-        const title = this.add.text(W/2, H/2 - 150, 'PANCAKE PIGEON', {
-            fontFamily: 'Arial Black', fontSize: 76, color: '#5b3a29',
+        const title = this.add.text(W/2, H/2 - 160, 'PANCAKE PIGEON', {
+            fontFamily: 'Arial Black', fontSize: 78, color: '#5b3a29',
             stroke: '#fff5e1', strokeThickness: 12
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScale(0).setRotation(-0.05);
+        this.tweens.add({
+            targets: title,
+            scale: 1,
+            rotation: 0,
+            duration: 600,
+            ease: 'Back.easeOut'
+        });
         this.tweens.add({
             targets: title,
             scale: 1.04,
             duration: 1400,
             yoyo: true,
             repeat: -1,
+            delay: 600,
             ease: 'Sine.easeInOut'
         });
 
-        // Mascot row
-        const pigeon = this.add.text(W/2 - 140, H/2 - 20, '🐦', { fontSize: 110 }).setOrigin(0.5);
-        const arrow = this.add.text(W/2, H/2 - 20, '➡️', { fontSize: 70 }).setOrigin(0.5);
-        const pancake = this.add.text(W/2 + 140, H/2 - 20, '🥞', { fontSize: 110 }).setOrigin(0.5);
-        this.tweens.add({ targets: [pigeon, pancake], y: '-=14', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        this.tweens.add({ targets: arrow, scale: 1.18, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        // Mascot row — uses the currently selected variant
+        this.selectedVariant = loadVariant();
+        const mascotY = H/2 - 60;
+        this.mascotPigeon = this.add.image(W/2 - 140, mascotY, staticTextureKey(this.selectedVariant))
+            .setDisplaySize(170, 170).setAlpha(0);
+        const pigeon = this.mascotPigeon;
+        const arrow = this.add.text(W/2, mascotY, '➡', {
+            fontFamily: 'Arial Black', fontSize: 60, color: '#5b3a29',
+            stroke: '#fff5e1', strokeThickness: 6
+        }).setOrigin(0.5).setAlpha(0);
+        const pancake = this.add.image(W/2 + 140, mascotY, 'pancake').setDisplaySize(170, 170).setAlpha(0);
 
-        this.add.text(W/2, H/2 + 60, 'A Heroic Rescue', {
-            fontFamily: 'Arial', fontSize: 28, color: '#5b3a29'
-        }).setOrigin(0.5);
+        this.tweens.add({ targets: pigeon, alpha: 1, x: W/2 - 150, duration: 600, delay: 300, ease: 'Cubic.easeOut' });
+        this.tweens.add({ targets: arrow, alpha: 1, duration: 400, delay: 600 });
+        this.tweens.add({ targets: pancake, alpha: 1, x: W/2 + 150, duration: 600, delay: 500, ease: 'Cubic.easeOut' });
 
-        // Play button
-        this.makeButton(W/2, H/2 + 160, 'PLAY', 280, 70, () => {
+        this.tweens.add({ targets: pigeon, y: '-=14', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 900 });
+        this.tweens.add({ targets: pigeon, angle: 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 900 });
+        this.tweens.add({ targets: pancake, y: '-=10', duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 1100 });
+        this.tweens.add({ targets: pancake, angle: -5, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 1100 });
+        const pancakeBaseScale = pancake.scaleX;
+        this.tweens.add({
+            targets: pancake,
+            scaleX: pancakeBaseScale * 1.08,
+            scaleY: pancakeBaseScale * 0.94,
+            duration: 700,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+            delay: 1100
+        });
+        this.tweens.add({ targets: arrow, scale: 1.2, x: W/2 + 14, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 800 });
+
+        // Tagline
+        const tagline = this.add.text(W/2, H/2 + 30, 'A Delicious Adventure', {
+            fontFamily: 'Arial', fontSize: 26, color: '#5b3a29'
+        }).setOrigin(0.5).setAlpha(0);
+        this.tweens.add({ targets: tagline, alpha: 1, duration: 500, delay: 700 });
+
+        // Variant picker
+        this.buildVariantPicker(W/2, H/2 + 105);
+
+        // Play button (animates in last)
+        const playBtn = this.makeButton(W/2, H/2 + 230, 'PLAY', 260, 64, () => {
             initAudio();
             SFX.click();
-            this.scene.start('LevelSelect');
+            this.cameras.main.fadeOut(350, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('LevelSelect'));
+        });
+        playBtn.setAlpha(0);
+        this.tweens.add({ targets: playBtn, alpha: 1, scale: 1, duration: 400, delay: 1000, ease: 'Back.easeOut' });
+        playBtn.setScale(0.6);
+
+        // Mute toggle in corner
+        const muteBtn = this.add.container(W - 40, 40);
+        const muteBg = this.add.rectangle(0, 0, 44, 44, 0x000000, 0.35).setStrokeStyle(2, 0xffffff, 0.6);
+        const muteTxt = this.add.text(0, 0, isMuted() ? '🔇' : '🔊', { fontFamily: 'Arial', fontSize: 22 }).setOrigin(0.5);
+        muteBtn.add([muteBg, muteTxt]);
+        muteBg.setInteractive({ useHandCursor: true });
+        muteBg.on('pointerover', () => { muteBg.setFillStyle(0xffffff, 0.18); muteBtn.setScale(1.06); });
+        muteBg.on('pointerout', () => { muteBg.setFillStyle(0x000000, 0.35); muteBtn.setScale(1); });
+        muteBg.on('pointerdown', () => {
+            setMuted(!isMuted());
+            muteTxt.setText(isMuted() ? '🔇' : '🔊');
+            SFX.click();
         });
 
-        this.add.text(W/2, H - 24, 'made for a sister, with love · 🐦', {
-            fontFamily: 'Arial', fontSize: 16, color: '#5b3a29'
+        // Distant flying birds
+        for (let i = 0; i < 4; i++) {
+            this.time.delayedCall(i * 800, () => this.spawnFlyingBird());
+        }
+        this.time.addEvent({
+            delay: 2200,
+            loop: true,
+            callback: () => this.spawnFlyingBird()
+        });
+
+        this.add.text(W/2, H - 24, 'made for a sister, with love', {
+            fontFamily: 'Arial', fontSize: 16, color: '#5b3a29', fontStyle: 'italic'
         }).setOrigin(0.5);
     }
 
+    buildVariantPicker (cx, cy) {
+        // "Choose your pigeon" label
+        this.add.text(cx, cy - 36, 'CHOOSE YOUR PIGEON', {
+            fontFamily: 'Arial Black', fontSize: 14, color: '#5b3a29',
+            stroke: '#fff5e1', strokeThickness: 4
+        }).setOrigin(0.5);
+
+        const slotW = 70;
+        const startX = cx - (VARIANT_ORDER.length - 1) * slotW / 2;
+        this.variantSlots = {};
+        VARIANT_ORDER.forEach((id, i) => {
+            const x = startX + i * slotW;
+            const slot = this.makeVariantSlot(x, cy + 6, id);
+            this.variantSlots[id] = slot;
+        });
+        this.refreshVariantSelection();
+    }
+
+    makeVariantSlot (x, y, id) {
+        const variant = VARIANTS[id];
+        const c = this.add.container(x, y).setAlpha(0);
+        // Outer ring (highlights when selected)
+        const ring = this.add.circle(0, 0, 30, 0x000000, 0).setStrokeStyle(3, 0x5b3a29, 0.45);
+        // Background coin
+        const bg = this.add.circle(0, 0, 26, 0xfff5e1, 0.95).setStrokeStyle(2, 0x5b3a29, 0.6);
+        // Avatar
+        const avatar = this.add.image(0, 2, staticTextureKey(id)).setDisplaySize(50, 50);
+        // Label — wrap so longer names ("Ryan (Not true king)") don't bleed into neighbors.
+        const label = this.add.text(0, 36, variant.name, {
+            fontFamily: 'Arial Black', fontSize: 11, color: '#5b3a29',
+            align: 'center', wordWrap: { width: 64, useAdvancedWrap: true }
+        }).setOrigin(0.5, 0);
+
+        c.add([ring, bg, avatar, label]);
+        bg.setInteractive({ useHandCursor: true });
+        bg.on('pointerover', () => { c.setScale(1.08); });
+        bg.on('pointerout', () => { c.setScale(this.selectedVariant === id ? 1.05 : 1); });
+        bg.on('pointerdown', () => {
+            SFX.click();
+            this.selectedVariant = id;
+            saveVariant(id);
+            this.mascotPigeon.setTexture(staticTextureKey(id));
+            this.refreshVariantSelection();
+        });
+
+        // Pop-in animation
+        this.tweens.add({
+            targets: c,
+            alpha: 1,
+            duration: 300,
+            delay: 800 + VARIANT_ORDER.indexOf(id) * 70,
+            ease: 'Cubic.easeOut'
+        });
+
+        c.ring = ring;
+        c.bg = bg;
+        return c;
+    }
+
+    refreshVariantSelection () {
+        for (const id of VARIANT_ORDER) {
+            const slot = this.variantSlots[id];
+            if (!slot) continue;
+            const isSel = this.selectedVariant === id;
+            slot.ring.setStrokeStyle(3, isSel ? 0xffd166 : 0x5b3a29, isSel ? 0.95 : 0.45);
+            slot.bg.setFillStyle(isSel ? 0xfff7ce : 0xfff5e1, 0.95);
+            slot.setScale(isSel ? 1.05 : 1);
+        }
+    }
+
+    spawnFlyingBird () {
+        const W = this.cameras.main.width;
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        const startX = dir > 0 ? -50 : W + 50;
+        const endX = dir > 0 ? W + 50 : -50;
+        const y = 50 + Math.random() * 220;
+        const tone = Math.random() < 0.5 ? 0x4a5a6a : 0x6b7785;
+
+        const bird = this.add.graphics();
+        bird.lineStyle(3, tone, 0.85);
+        bird.beginPath();
+        bird.moveTo(-14, 0);
+        bird.lineTo(-7, -8);
+        bird.lineTo(0, 0);
+        bird.lineTo(7, -8);
+        bird.lineTo(14, 0);
+        bird.strokePath();
+        bird.x = startX;
+        bird.y = y;
+        if (dir < 0) bird.scaleX = -1;
+        this.tweens.add({
+            targets: bird,
+            scaleY: 0.45,
+            duration: 220 + Math.random() * 80,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+        this.tweens.add({
+            targets: bird,
+            x: endX,
+            y: y + (Math.random() - 0.5) * 50,
+            duration: 9000 + Math.random() * 5000,
+            ease: 'Sine.easeInOut',
+            onComplete: () => bird.destroy()
+        });
+    }
+
     makeButton (x, y, label, w, h, onClick) {
-        const bg = this.add.rectangle(x, y, w, h, 0xff8c42).setStrokeStyle(5, 0x5b3a29);
-        const txt = this.add.text(x, y, label, {
+        const c = this.add.container(x, y);
+        const bg = this.add.rectangle(0, 0, w, h, 0xff8c42).setStrokeStyle(5, 0x5b3a29);
+        const txt = this.add.text(0, 0, label, {
             fontFamily: 'Arial Black', fontSize: 36, color: '#ffffff',
             stroke: '#5b3a29', strokeThickness: 5
         }).setOrigin(0.5);
+        c.add([bg, txt]);
         bg.setInteractive({ useHandCursor: true });
-        bg.on('pointerover', () => { bg.setFillStyle(0xffa566); bg.setScale(1.06); txt.setScale(1.06); });
-        bg.on('pointerout', () => { bg.setFillStyle(0xff8c42); bg.setScale(1); txt.setScale(1); });
+        bg.on('pointerover', () => { bg.setFillStyle(0xffa566); c.setScale(1.06); });
+        bg.on('pointerout', () => { bg.setFillStyle(0xff8c42); c.setScale(1); });
         bg.on('pointerdown', onClick);
-        return bg;
+        return c;
     }
 }
