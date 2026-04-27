@@ -12,6 +12,12 @@ export class MainMenu extends Scene
     create () {
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
+        // Portrait/mobile gets larger UI so on-screen text and tap targets are
+        // legible after the canvas is scaled down to phone width. The variant
+        // picker uses a larger scale so the small coin slots are tappable.
+        const isPortrait = H > W;
+        this.uiScale = isPortrait ? 1.7 : 1;
+        this.pickerScale = isPortrait ? 2.5 : 1;
         this.cameras.main.setBackgroundColor(0x9bd6f5);
         this.cameras.main.fadeIn(500, 0, 0, 0);
 
@@ -80,9 +86,12 @@ export class MainMenu extends Scene
             });
         }
 
-        // Title
-        const title = this.add.text(W/2, H/2 - 160, 'PANCAKE PIGEON', {
-            fontFamily: 'Arial Black', fontSize: 78, color: '#5b3a29',
+        // Title — uses a smaller scaling factor than the rest of the UI so
+        // "PANCAKE PIGEON" doesn't overflow the canvas width on portrait.
+        const titleScale = isPortrait ? 1.25 : 1;
+        const titleSize = Math.round(78 * titleScale);
+        const title = this.add.text(W/2, H/2 - 160 * this.uiScale, 'PANCAKE PIGEON', {
+            fontFamily: 'Arial Black', fontSize: titleSize, color: '#5b3a29',
             stroke: '#fff5e1', strokeThickness: 12
         }).setOrigin(0.5).setScale(0).setRotation(-0.05);
         this.tweens.add({
@@ -104,19 +113,23 @@ export class MainMenu extends Scene
 
         // Mascot row — uses the currently selected variant
         this.selectedVariant = loadVariant();
-        const mascotY = H/2 - 60;
-        this.mascotPigeon = this.add.image(W/2 - 140, mascotY, staticTextureKey(this.selectedVariant))
-            .setDisplaySize(170, 170).setAlpha(0);
+        const mascotY = H/2 - 60 * this.uiScale;
+        const mascotSize = Math.round(170 * this.uiScale);
+        const mascotOff = 140 * this.uiScale;
+        const mascotOffEnd = 150 * this.uiScale;
+        this.mascotPigeon = this.add.image(W/2 - mascotOff, mascotY, staticTextureKey(this.selectedVariant))
+            .setDisplaySize(mascotSize, mascotSize).setAlpha(0);
         const pigeon = this.mascotPigeon;
         const arrow = this.add.text(W/2, mascotY, '➡', {
-            fontFamily: 'Arial Black', fontSize: 60, color: '#5b3a29',
+            fontFamily: 'Arial Black', fontSize: Math.round(60 * this.uiScale), color: '#5b3a29',
             stroke: '#fff5e1', strokeThickness: 6
         }).setOrigin(0.5).setAlpha(0);
-        const pancake = this.add.image(W/2 + 140, mascotY, 'pancake').setDisplaySize(170, 170).setAlpha(0);
+        const pancake = this.add.image(W/2 + mascotOff, mascotY, 'pancake')
+            .setDisplaySize(mascotSize, mascotSize).setAlpha(0);
 
-        this.tweens.add({ targets: pigeon, alpha: 1, x: W/2 - 150, duration: 600, delay: 300, ease: 'Cubic.easeOut' });
+        this.tweens.add({ targets: pigeon, alpha: 1, x: W/2 - mascotOffEnd, duration: 600, delay: 300, ease: 'Cubic.easeOut' });
         this.tweens.add({ targets: arrow, alpha: 1, duration: 400, delay: 600 });
-        this.tweens.add({ targets: pancake, alpha: 1, x: W/2 + 150, duration: 600, delay: 500, ease: 'Cubic.easeOut' });
+        this.tweens.add({ targets: pancake, alpha: 1, x: W/2 + mascotOffEnd, duration: 600, delay: 500, ease: 'Cubic.easeOut' });
 
         this.tweens.add({ targets: pigeon, y: '-=14', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 900 });
         this.tweens.add({ targets: pigeon, angle: 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 900 });
@@ -136,16 +149,19 @@ export class MainMenu extends Scene
         this.tweens.add({ targets: arrow, scale: 1.2, x: W/2 + 14, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 800 });
 
         // Tagline
-        const tagline = this.add.text(W/2, H/2 + 30, 'A Delicious Adventure', {
-            fontFamily: 'Arial', fontSize: 26, color: '#5b3a29'
+        const tagline = this.add.text(W/2, H/2 + 30 * this.uiScale, 'A Delicious Adventure', {
+            fontFamily: 'Arial', fontSize: Math.round(26 * this.uiScale), color: '#5b3a29'
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: tagline, alpha: 1, duration: 500, delay: 700 });
 
         // Variant picker
-        this.buildVariantPicker(W/2, H/2 + 105);
+        this.buildVariantPicker(W/2, H/2 + 105 * this.uiScale);
 
         // Play button (animates in last)
-        const playBtn = this.makeButton(W/2, H/2 + 230, 'PLAY', 260, 64, () => {
+        const playBtnY = H/2 + 230 * this.uiScale;
+        const playBtnW = Math.round(260 * this.uiScale);
+        const playBtnH = Math.round(64 * this.uiScale);
+        const playBtn = this.makeButton(W/2, playBtnY, 'PLAY', playBtnW, playBtnH, () => {
             initAudio();
             SFX.click();
             this.cameras.main.fadeOut(350, 0, 0, 0);
@@ -156,9 +172,10 @@ export class MainMenu extends Scene
         playBtn.setScale(0.6);
 
         // Mute toggle in corner
-        const muteBtn = this.add.container(W - 40, 40);
-        const muteBg = this.add.rectangle(0, 0, 44, 44, 0x000000, 0.35).setStrokeStyle(2, 0xffffff, 0.6);
-        const muteTxt = this.add.text(0, 0, isMuted() ? '🔇' : '🔊', { fontFamily: 'Arial', fontSize: 22 }).setOrigin(0.5);
+        const muteSize = Math.round(44 * this.uiScale);
+        const muteBtn = this.add.container(W - muteSize/2 - 12, muteSize/2 + 12);
+        const muteBg = this.add.rectangle(0, 0, muteSize, muteSize, 0x000000, 0.35).setStrokeStyle(2, 0xffffff, 0.6);
+        const muteTxt = this.add.text(0, 0, isMuted() ? '🔇' : '🔊', { fontFamily: 'Arial', fontSize: Math.round(22 * this.uiScale) }).setOrigin(0.5);
         muteBtn.add([muteBg, muteTxt]);
         muteBg.setInteractive({ useHandCursor: true });
         muteBg.on('pointerover', () => { muteBg.setFillStyle(0xffffff, 0.18); muteBtn.setScale(1.06); });
@@ -180,41 +197,43 @@ export class MainMenu extends Scene
         });
 
         this.add.text(W/2, H - 24, 'made for a sister, with love', {
-            fontFamily: 'Arial', fontSize: 16, color: '#5b3a29', fontStyle: 'italic'
+            fontFamily: 'Arial', fontSize: Math.round(16 * this.uiScale), color: '#5b3a29', fontStyle: 'italic'
         }).setOrigin(0.5);
     }
 
     buildVariantPicker (cx, cy) {
+        const s = this.pickerScale;
         // "Choose your pigeon" label
-        this.add.text(cx, cy - 36, 'CHOOSE YOUR PIGEON', {
-            fontFamily: 'Arial Black', fontSize: 14, color: '#5b3a29',
+        this.add.text(cx, cy - 36 * s, 'CHOOSE YOUR PIGEON', {
+            fontFamily: 'Arial Black', fontSize: Math.round(14 * s), color: '#5b3a29',
             stroke: '#fff5e1', strokeThickness: 4
         }).setOrigin(0.5);
 
-        const slotW = 70;
+        const slotW = 70 * s;
         const startX = cx - (VARIANT_ORDER.length - 1) * slotW / 2;
         this.variantSlots = {};
         VARIANT_ORDER.forEach((id, i) => {
             const x = startX + i * slotW;
-            const slot = this.makeVariantSlot(x, cy + 6, id);
+            const slot = this.makeVariantSlot(x, cy + 6 * s, id);
             this.variantSlots[id] = slot;
         });
         this.refreshVariantSelection();
     }
 
     makeVariantSlot (x, y, id) {
+        const s = this.pickerScale;
         const variant = VARIANTS[id];
         const c = this.add.container(x, y).setAlpha(0);
         // Outer ring (highlights when selected)
-        const ring = this.add.circle(0, 0, 30, 0x000000, 0).setStrokeStyle(3, 0x5b3a29, 0.45);
+        const ring = this.add.circle(0, 0, 30 * s, 0x000000, 0).setStrokeStyle(3, 0x5b3a29, 0.45);
         // Background coin
-        const bg = this.add.circle(0, 0, 26, 0xfff5e1, 0.95).setStrokeStyle(2, 0x5b3a29, 0.6);
+        const bg = this.add.circle(0, 0, 26 * s, 0xfff5e1, 0.95).setStrokeStyle(2, 0x5b3a29, 0.6);
         // Avatar
-        const avatar = this.add.image(0, 2, staticTextureKey(id)).setDisplaySize(50, 50);
+        const avatar = this.add.image(0, 2 * s, staticTextureKey(id)).setDisplaySize(50 * s, 50 * s);
         // Label — wrap so longer names ("Ryan (Not true king)") don't bleed into neighbors.
-        const label = this.add.text(0, 36, variant.name, {
-            fontFamily: 'Arial Black', fontSize: 11, color: '#5b3a29',
-            align: 'center', wordWrap: { width: 64, useAdvancedWrap: true }
+        const label = this.add.text(0, 36 * s, variant.name, {
+            fontFamily: 'Arial Black', fontSize: Math.round(11 * s), color: '#5b3a29',
+            align: 'center', wordWrap: { width: 64 * s, useAdvancedWrap: true }
         }).setOrigin(0.5, 0);
 
         c.add([ring, bg, avatar, label]);
@@ -296,7 +315,7 @@ export class MainMenu extends Scene
         const c = this.add.container(x, y);
         const bg = this.add.rectangle(0, 0, w, h, 0xff8c42).setStrokeStyle(5, 0x5b3a29);
         const txt = this.add.text(0, 0, label, {
-            fontFamily: 'Arial Black', fontSize: 36, color: '#ffffff',
+            fontFamily: 'Arial Black', fontSize: Math.round(36 * this.uiScale), color: '#ffffff',
             stroke: '#5b3a29', strokeThickness: 5
         }).setOrigin(0.5);
         c.add([bg, txt]);

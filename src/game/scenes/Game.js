@@ -1166,16 +1166,24 @@ export class Game extends Scene
     createUI () {
         const cam = this.cameras.main;
         const W = cam.width;
+        const H = cam.height;
+        // Top HUD scales up in portrait so text and tap targets are legible
+        // after the canvas is scaled down to phone width.
+        const isPortrait = H > W;
+        const hudScale = isPortrait ? 1.7 : 1;
+        this.hudScale = hudScale;
+        const barH = Math.round(60 * hudScale);
+        const barCenterY = barH / 2;
 
         // Top bar (warm dark brown, matches wood/earth palette)
-        this.add.rectangle(W/2, 30, W, 60, 0x3a2818, 0.55).setScrollFactor(0).setDepth(100);
-        this.add.rectangle(W/2, 60, W, 2, 0x2a1810, 0.30).setScrollFactor(0).setDepth(100);
+        this.add.rectangle(W/2, barCenterY, W, barH, 0x3a2818, 0.55).setScrollFactor(0).setDepth(100);
+        this.add.rectangle(W/2, barH, W, 2, 0x2a1810, 0.30).setScrollFactor(0).setDepth(100);
         // Subtle warm highlight at the bottom of the bar
         this.add.rectangle(W/2, 4, W, 2, 0xffd166, 0.18).setScrollFactor(0).setDepth(100);
 
         // Level title (left)
-        this.add.text(20, 16, this.level.name, {
-            fontFamily: 'Arial Black', fontSize: 22, color: '#ffffff',
+        this.add.text(20, barCenterY - 14 * hudScale, this.level.name, {
+            fontFamily: 'Arial Black', fontSize: Math.round(22 * hudScale), color: '#ffffff',
             stroke: '#000000', strokeThickness: 3
         }).setScrollFactor(0).setDepth(101);
 
@@ -1183,51 +1191,60 @@ export class Game extends Scene
         // Sits at the bottom of the visible game view, above the touch
         // control bar (which lives in the canvas's bottom strip on mobile).
         this.healthIcons = [];
-        const heartY = (this.viewH ?? cam.height) - 28;
-        const pillW = 26 + this.maxHealth * 30;
-        this.add.rectangle(W/2, heartY, pillW, 38, 0x3a2818, 0.55)
+        const heartY = (this.viewH ?? cam.height) - 28 * hudScale;
+        const heartGap = 30 * hudScale;
+        const pillW = 26 * hudScale + this.maxHealth * heartGap;
+        this.add.rectangle(W/2, heartY, pillW, 38 * hudScale, 0x3a2818, 0.55)
             .setStrokeStyle(2, 0xffd166, 0.45).setScrollFactor(0).setDepth(100);
         for (let i = 0; i < this.maxHealth; i++) {
-            const x = W/2 + (i - (this.maxHealth - 1) / 2) * 30;
+            const x = W/2 + (i - (this.maxHealth - 1) / 2) * heartGap;
             const h = this.add.text(x, heartY, '❤', {
-                fontFamily: 'Arial Black', fontSize: 22, color: '#ff4f7a',
+                fontFamily: 'Arial Black', fontSize: Math.round(22 * hudScale), color: '#ff4f7a',
                 stroke: '#5b3a29', strokeThickness: 4
             }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
             this.healthIcons.push(h);
         }
 
         // Pancake counter (center) — pancake icon + count
-        const counterContainer = this.add.container(W/2, 30).setScrollFactor(0).setDepth(101);
-        const cakeIcon = this.add.image(-32, 0, 'pancake').setDisplaySize(36, 36);
-        this.pancakeText = this.add.text(8, 0, `0 / ${this.totalPancakes}`, {
-            fontFamily: 'Arial Black', fontSize: 26, color: '#ffffff',
+        const counterContainer = this.add.container(W/2, barCenterY).setScrollFactor(0).setDepth(101);
+        const cakeIcon = this.add.image(-32 * hudScale, 0, 'pancake').setDisplaySize(36 * hudScale, 36 * hudScale);
+        this.pancakeText = this.add.text(8 * hudScale, 0, `0 / ${this.totalPancakes}`, {
+            fontFamily: 'Arial Black', fontSize: Math.round(26 * hudScale), color: '#ffffff',
             stroke: '#000000', strokeThickness: 4
         }).setOrigin(0, 0.5);
         counterContainer.add([cakeIcon, this.pancakeText]);
 
         // Combo badge (appears when streak > 1)
-        this.comboBadge = this.add.container(W/2, 64).setScrollFactor(0).setDepth(101).setAlpha(0);
-        const comboBg = this.add.rectangle(0, 0, 130, 26, 0xff6b9d, 0.95).setStrokeStyle(2, 0xffffff);
+        this.comboBadge = this.add.container(W/2, barH + 16 * hudScale).setScrollFactor(0).setDepth(101).setAlpha(0);
+        const comboBg = this.add.rectangle(0, 0, 130 * hudScale, 26 * hudScale, 0xff6b9d, 0.95).setStrokeStyle(2, 0xffffff);
         const comboText = this.add.text(0, 0, 'x2 COMBO!', {
-            fontFamily: 'Arial Black', fontSize: 16, color: '#ffffff',
+            fontFamily: 'Arial Black', fontSize: Math.round(16 * hudScale), color: '#ffffff',
             stroke: '#5b3a29', strokeThickness: 3
         }).setOrigin(0.5);
         this.comboBadge.add([comboBg, comboText]);
         this.comboBadgeBg = comboBg;
         this.comboBadgeText = comboText;
 
-        // Right-side button cluster: Mute + Pause
-        this.muteBtn = this.makeIconButton(W - 96, 30, '🔊', () => this.toggleMute());
-        this.pauseBtn = this.makeIconButton(W - 36, 30, '⏸', () => this.openPauseOverlay());
+        // Right-side button cluster: Mute + Pause. Icon buttons get a larger
+        // multiplier than the rest of the HUD so they remain comfortable tap
+        // targets after the canvas is scaled down to phone width.
+        const iconScale = isPortrait ? 2.6 : 1;
+        this.iconScale = iconScale;
+        const iconSize = 44 * iconScale;
+        const iconGap = iconSize + 16 * iconScale;
+        this.muteBtn = this.makeIconButton(W - iconSize/2 - iconGap, barCenterY, '🔊', () => this.toggleMute());
+        this.pauseBtn = this.makeIconButton(W - iconSize/2 - 12, barCenterY, '⏸', () => this.openPauseOverlay());
         this.refreshMuteIcon();
 
     }
 
     makeIconButton (x, y, glyph, onClick) {
+        const iconScale = this.iconScale ?? 1;
+        const size = Math.round(44 * iconScale);
         const btn = this.add.container(x, y).setScrollFactor(0).setDepth(101);
-        const bg = this.add.rectangle(0, 0, 44, 44, 0x3a2818, 0.5).setStrokeStyle(2, 0xfde6c0, 0.55);
+        const bg = this.add.rectangle(0, 0, size, size, 0x3a2818, 0.5).setStrokeStyle(2, 0xfde6c0, 0.55);
         const txt = this.add.text(0, 0, glyph, {
-            fontFamily: 'Arial', fontSize: 22, color: '#fff5e1'
+            fontFamily: 'Arial', fontSize: Math.round(22 * iconScale), color: '#fff5e1'
         }).setOrigin(0.5);
         btn.add([bg, txt]);
         bg.setInteractive({ useHandCursor: true });

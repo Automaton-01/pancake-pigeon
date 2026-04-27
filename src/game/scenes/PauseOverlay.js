@@ -14,17 +14,23 @@ export class PauseOverlay extends Scene
     create () {
         const W = this.cameras.main.width;
         const H = this.cameras.main.height;
+        // Portrait/mobile uses larger UI so the pause card and its buttons
+        // are easy to read and tap after the canvas is scaled to phone width.
+        const isPortrait = H > W;
+        this.uiScale = isPortrait ? 1.7 : 1;
+        const s = this.uiScale;
 
         // Backdrop
         const dim = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0).setDepth(0);
         this.tweens.add({ targets: dim, fillAlpha: 0.55, duration: 200, ease: 'Sine.easeOut' });
 
         // Card
-        const cardW = 460, cardH = 360;
+        const cardW = Math.round(460 * s);
+        const cardH = Math.round(360 * s);
         const card = this.add.container(W/2, H/2 + 40).setDepth(1).setAlpha(0);
         const bg = this.add.rectangle(0, 0, cardW, cardH, 0xfff5e1).setStrokeStyle(6, 0x5b3a29);
-        const title = this.add.text(0, -cardH/2 + 50, 'PAUSED', {
-            fontFamily: 'Arial Black', fontSize: 52, color: '#5b3a29',
+        const title = this.add.text(0, -cardH/2 + 50 * s, 'PAUSED', {
+            fontFamily: 'Arial Black', fontSize: Math.round(52 * s), color: '#5b3a29',
             stroke: '#ffd166', strokeThickness: 6
         }).setOrigin(0.5);
         card.add([bg, title]);
@@ -37,14 +43,15 @@ export class PauseOverlay extends Scene
             ease: 'Back.easeOut'
         });
 
-        const resumeBtn = this.makeBtn(0, -25, 'RESUME', 320, 60, 0x4caf50, () => this.resume());
-        const muteBtn = this.makeBtn(0, 60, isMuted() ? 'UNMUTE' : 'MUTE', 320, 50, 0x5b8def, null);
+        const btnW = Math.round(320 * s);
+        const resumeBtn = this.makeBtn(0, -25 * s, 'RESUME', btnW, Math.round(60 * s), 0x4caf50, () => this.resume());
+        const muteBtn = this.makeBtn(0, 60 * s, isMuted() ? 'UNMUTE' : 'MUTE', btnW, Math.round(50 * s), 0x5b8def, null);
         muteBtn.bg.on('pointerdown', () => {
             setMuted(!isMuted());
             muteBtn.txt.setText(isMuted() ? 'UNMUTE' : 'MUTE');
             SFX.click();
         });
-        const quitBtn = this.makeBtn(0, 130, 'QUIT TO LEVELS', 320, 50, 0xff8c42, () => this.quit());
+        const quitBtn = this.makeBtn(0, 130 * s, 'QUIT TO LEVELS', btnW, Math.round(50 * s), 0xff8c42, () => this.quit());
         card.add([resumeBtn, muteBtn, quitBtn]);
 
         // Keyboard: Esc to resume
@@ -52,11 +59,13 @@ export class PauseOverlay extends Scene
     }
 
     makeBtn (x, y, label, w, h, color, onClick) {
+        const s = this.uiScale;
         const c = this.add.container(x, y);
         const bg = this.add.rectangle(0, 0, w, h, color).setStrokeStyle(4, 0x5b3a29);
+        const bigBtn = h > 55 * s;
         const txt = this.add.text(0, 0, label, {
             fontFamily: 'Arial Black',
-            fontSize: h > 55 ? 30 : 24,
+            fontSize: Math.round((bigBtn ? 30 : 24) * s),
             color: '#ffffff',
             stroke: '#5b3a29',
             strokeThickness: 4
